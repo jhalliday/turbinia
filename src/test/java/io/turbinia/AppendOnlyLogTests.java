@@ -70,12 +70,11 @@ class AppendOnlyLogTests {
                         StandardOpenOption.CREATE));
 
         mappedByteBuffer = fileChannel.map(ExtendedMapMode.READ_WRITE_SYNC, 0, 1024);
+        forceInvalidation();
     }
 
     @AfterEach
     public void tearDown() throws IOException {
-
-        forceInvalidation();
 
         // https://bugs.openjdk.java.net/browse/JDK-4724038
         unsafe.invokeCleaner(mappedByteBuffer);
@@ -213,6 +212,7 @@ class AppendOnlyLogTests {
         f.setAccessible(true);
         MappedByteBuffer buffer = (MappedByteBuffer) f.get(appendOnlyLog);
 
+        ExecutionTracer.INSTANCE.allowNonFlushingOfDirtyLines = true;
         buffer.putInt(buffer.position() - 4, 0); // overwrite the payload to cause checksum mismatch
 
         iter = appendOnlyLog.iterator();
@@ -338,6 +338,12 @@ class AppendOnlyLogTests {
     public void testWriteAndReadBack(String put, boolean padding, boolean linear) {
 
         AppendOnlyLog appendOnlyLog = new AppendOnlyLog(mappedByteBuffer, 0, 1024, padding, linear);
+
+        if(padding) {
+            // in padded mode, the log will try to flush the unused padding range. The hw will elide that, since
+            // it knows the lines are clean. But our test harness will complain unless we suppress it...
+            ExecutionTracer.INSTANCE.allowFlushingOfCleanLines = true;
+        }
 
         int numEntriesWritten = 0;
         int i = 1;

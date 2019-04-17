@@ -254,7 +254,6 @@ public class AppendOnlyLog implements Iterable<ByteBuffer> {
      * @param offset The offset within the array of the first byte to be read
      * @param length The number of bytes to be read from the given array
      * @return true on successful persistence, false if insufficient space remains.
-     * @throws BufferOverflowException If there is insufficient space in this log
      * @see {@link #put(byte[], int, int)}
      */
     public boolean tryPut(byte[] src, int offset, int length) {
@@ -301,7 +300,6 @@ public class AppendOnlyLog implements Iterable<ByteBuffer> {
      *
      * @param src The source buffer from which bytes are to be read
      * @return true after a successful write, false if insufficient space remains to accommodate the src.
-     * @throws BufferOverflowException If there is insufficient space in this log
      */
     public boolean tryPut(ByteBuffer src) {
         logger.entry(src);

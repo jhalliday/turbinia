@@ -39,7 +39,7 @@ public class AppendOnlyLog implements Iterable<ByteBuffer> {
     private static final XLogger logger = XLoggerFactory.getXLogger(AppendOnlyLog.class);
 
     // change this if changing the data layout!
-    private static final byte[] MAGIC_HEADER = new String("TRBLOG01").getBytes(StandardCharsets.UTF_8);
+    private static final byte[] MAGIC_HEADER = new String("TRBAOL01").getBytes(StandardCharsets.UTF_8);
 
     private static final int INT_SIZE = 4;
     private static final int BLOCK_SIZE = 256;

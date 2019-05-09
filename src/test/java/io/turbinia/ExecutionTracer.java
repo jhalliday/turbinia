@@ -96,7 +96,7 @@ public class ExecutionTracer {
                 logger.debug("modifying line {}, which was clean", idx);
             }
 
-            dirtyLines[addressToLineIndex(address)] = true;
+            dirtyLines[idx] = true;
         }
     }
 
@@ -114,7 +114,7 @@ public class ExecutionTracer {
                 flushedCleanLine = true;
             }
 
-            dirtyLines[addressToLineIndex(address)] = false;
+            dirtyLines[idx] = false;
         }
     }
 

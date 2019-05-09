@@ -82,6 +82,20 @@
             </plugin>
 
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.0.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
                 <!--  **/Test*.java  **/*Test.java  **/*Tests.java  **/*TestCase.java  -->
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -90,6 +104,7 @@
                     <useSystemClassLoader>true</useSystemClassLoader>
                     <useManifestOnlyJar>true</useManifestOnlyJar>
                     <forkMode>once</forkMode>
+                    <jvm>/home/jhalli/IdeaProjects/openjdk/13/jdk-jdk/build/linux-x86_64-server-release/images/jdk/bin/java</jvm>
                     <parallel>false</parallel>
                     <!-- ensure we don't inherit annotationClass byteman jar form any env settings -->
                     <environmentVariables>

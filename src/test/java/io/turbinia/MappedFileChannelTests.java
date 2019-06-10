@@ -37,6 +37,7 @@ public class MappedFileChannelTests {
 
         if (file.exists()) {
             file.delete();
+            MappedFileChannel.getMetadataFile(file).delete();
         }
 
         mappedFileChannel = new MappedFileChannel(file, 1024);
@@ -52,12 +53,32 @@ public class MappedFileChannelTests {
     @Test
     public void testInitializationFailure() throws IOException {
 
+        File bogusFile = new File("/tmp/bogus");
         try {
-            MappedFileChannel mappedFileChannel = new MappedFileChannel(new File("/tmp/bogus"), 1024);
+            MappedFileChannel mappedFileChannel = new MappedFileChannel(bogusFile, 1024);
             fail("should throw IOException");
         } catch (IOException e) {
             assertEquals("Operation not supported", e.getMessage());
+            assertFalse(MappedFileChannel.getMetadataFile(bogusFile).exists());
         }
+    }
+
+    @Test
+    public void testMetadataLifecycle() throws IOException {
+        assertThrows(IOException.class, () -> mappedFileChannel.deleteMetadata());
+        mappedFileChannel.close();
+        assertTrue(MappedFileChannel.getMetadataFile(file).exists());
+        mappedFileChannel.deleteMetadata();
+        assertFalse(MappedFileChannel.getMetadataFile(file).exists());
+    }
+
+    @Test
+    public void testClearing() throws IOException {
+        assertEquals(0, mappedFileChannel.position());
+        mappedFileChannel.write(ByteBuffer.wrap(new byte[] {(byte)1}));
+        assertEquals(1, mappedFileChannel.position());
+        mappedFileChannel.clear();
+        assertEquals(0, mappedFileChannel.position());
     }
 
     @Test

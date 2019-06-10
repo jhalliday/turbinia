@@ -36,6 +36,7 @@ public class MappedFileChannelMetadataTests {
 
         if (file.exists()) {
             file.delete();
+
         }
     }
 

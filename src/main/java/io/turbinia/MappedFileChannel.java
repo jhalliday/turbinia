@@ -23,10 +23,8 @@ import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.*;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
-import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -39,17 +37,7 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class MappedFileChannel extends FileChannel {
 
-    // TODO replication size. expose raw Channel?
-
     private static final XLogger logger = XLoggerFactory.getXLogger(MappedFileChannel.class);
-
-    // change this if changing the data layout!
-    private static final byte[] MAGIC_HEADER = new String("TRBMFC01").getBytes(StandardCharsets.UTF_8);
-
-    private static final int LOG_HEADER_BYTES = 64;
-
-    // relative to 'rawBuffer'
-    private static final int MAGIC_OFFSET = 0;
 
     private static Unsafe unsafe;
 
@@ -64,15 +52,27 @@ public class MappedFileChannel extends FileChannel {
         }
     }
 
+    /**
+     * Returns the metadata file associated with the given file.
+     *
+     * @param file the log file.
+     * @return the metadata file.
+     * @throws IOException if the given file is invalid.
+     */
+    public static File getMetadataFile(File file) throws IOException {
+        return new File(file.getCanonicalPath()+".pmem");
+    }
+
     private final PersistenceHandle persistenceHandle;
 
     private final Lock lock = new ReentrantLock();
 
+    private final File file;
     private final FileChannel fileChannel;
     private final ByteBuffer rawBuffer;
     private final ByteBuffer dataBuffer;
 
-    private int persistenceIndex;
+    private final MappedFileChannelMetadata metadata;
 
     /**
      * Initializes a new MappedFileChannel over the provided FileChannel, with a fixed length.
@@ -86,6 +86,8 @@ public class MappedFileChannel extends FileChannel {
     public MappedFileChannel(File file, int length) throws IOException {
         logger.entry(file, length);
 
+        this.file = file;
+
         this.fileChannel = (FileChannel) Files
                 .newByteChannel(file.toPath(), EnumSet.of(
                         StandardOpenOption.READ,
@@ -93,8 +95,7 @@ public class MappedFileChannel extends FileChannel {
                         StandardOpenOption.CREATE));
 
         MappedByteBuffer tmpRawBuffer = fileChannel.map(ExtendedMapMode.READ_WRITE_SYNC, 0, length);
-
-        rawBuffer = tmpRawBuffer;
+        this.rawBuffer = tmpRawBuffer;
 
         // force MUST be called on the original buffer, NOT a duplicate or slice,
         // so we need to keep a handle on it. However, we don't want to inadvertently
@@ -103,23 +104,36 @@ public class MappedFileChannel extends FileChannel {
 
         // we slice the origin buffer, so that we can rely on limit to stop us overwriting the trailing metadata area
         ByteBuffer tmp = tmpRawBuffer.slice();
-        tmp.position(LOG_HEADER_BYTES);
+        tmp.position(0);
         tmp.limit(length);
         dataBuffer = tmp.slice();
 
-        persistenceIndex = 0;
+        metadata = new MappedFileChannelMetadata( getMetadataFile(file) );
+        clearDataFromOffset( metadata.getPersistenceIndex() ); // TODO make less dangerous
+        dataBuffer.position(0);
 
-        byte[] header = new byte[MAGIC_HEADER.length];
-        rawBuffer.get(header);
-        if (Arrays.equals(header, MAGIC_HEADER)) {
-            // pre-existing data in known format.
-            // re-read to seek to buffer's end position
-            persistenceIndex = rawBuffer.getInt(MAGIC_HEADER.length);
-            // clear any partial writes that come after the checkpoint.
-            clearDataFromOffset(persistenceIndex);
-        } else {
-            // we don't know what's in the provided buffer, so zero it out for safety
-            clear();
+        logger.exit();
+    }
+
+
+
+    /**
+     * Delete the metadata file that is associated with this channel.
+     *
+     * @throws IOException if the channel is still open.
+     */
+    public void deleteMetadata() throws IOException {
+        logger.entry();
+
+        if(fileChannel.isOpen()) {
+            IOException ioException = new IOException("Unable to delete metadata for an open channel");
+            logger.throwing(ioException);
+            throw ioException;
+        }
+
+        File metadata = getMetadataFile(file);
+        if(metadata.exists()) {
+            metadata.delete();
         }
 
         logger.exit();
@@ -193,7 +207,7 @@ public class MappedFileChannel extends FileChannel {
             validateIsOpen();
             validatePosition(position);
 
-            int length = persistenceIndex-(int)position;
+            int length = metadata.getPersistenceIndex()-(int)position;
             if(length <= 0) {
                 length = -1;
             }
@@ -286,9 +300,9 @@ public class MappedFileChannel extends FileChannel {
         return result;
     }
 
-    private int writeInternal(ByteBuffer src, int position) {
+    private int writeInternal(ByteBuffer src, int position) throws ClosedChannelException {
 
-        if(position < persistenceIndex) {
+        if(position < metadata.getPersistenceIndex()) {
             throw new IllegalArgumentException();
         }
 
@@ -306,13 +320,9 @@ public class MappedFileChannel extends FileChannel {
         return length;
     }
 
-    private void persist(int startIndex, int length) {
-        persistenceHandle.persist(LOG_HEADER_BYTES+startIndex, length);
-
-        persistenceIndex = startIndex+length;
-        rawBuffer.putInt(MAGIC_HEADER.length, persistenceIndex);
-
-        persistenceHandle.persist(MAGIC_HEADER.length, 4);
+    private void persist(int startIndex, int length) throws ClosedChannelException {
+        persistenceHandle.persist(startIndex, length);
+        metadata.persist(startIndex, length);
     }
 
     /**
@@ -414,24 +424,16 @@ public class MappedFileChannel extends FileChannel {
      * <p>
      * This operation overwrites the entire capacity, so may be slow on large files.
      */
-    public void clear() {
+    public void clear() throws ClosedChannelException {
         logger.entry();
 
         lock.lock();
         try {
 
-            // first overwrite the header to invalidate the file,
+            // first overwrite the metadata to invalidate the file,
             // in case we crash in inconsistent state whilst zeroing the rest
-            rawBuffer.clear();
-            rawBuffer.put(MAGIC_OFFSET, new byte[LOG_HEADER_BYTES]);
-            persistenceHandle.persist(MAGIC_OFFSET, LOG_HEADER_BYTES);
-
+            metadata.clear();
             clearDataFromOffset(0);
-
-            rawBuffer.clear();
-            rawBuffer.put(MAGIC_OFFSET, MAGIC_HEADER);
-            persistenceHandle.persist(MAGIC_OFFSET, LOG_HEADER_BYTES);
-
             dataBuffer.position(0);
 
         } finally {
@@ -452,7 +454,7 @@ public class MappedFileChannel extends FileChannel {
         // we could force every N lines whilst looping above, but assume the hardware cache management
         // knows what it's doing and will elide flushes if they are for lines that have already been
         // evicted by cache pressure.
-        persistenceHandle.persist(LOG_HEADER_BYTES+offset, dataBuffer.capacity()-offset);
+        persistenceHandle.persist(0, dataBuffer.capacity()-offset);
     }
 
     /**
@@ -478,7 +480,9 @@ public class MappedFileChannel extends FileChannel {
 
     private void validateIsOpen() throws ClosedChannelException {
         if(!fileChannel.isOpen()) {
-            throw new ClosedChannelException();
+            ClosedChannelException closedChannelException = new ClosedChannelException();
+            logger.throwing(closedChannelException);
+            throw closedChannelException;
         }
     }
 

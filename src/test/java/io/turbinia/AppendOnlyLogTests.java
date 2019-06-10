@@ -12,7 +12,7 @@
  */
 package io.turbinia;
 
-import com.sun.nio.file.ExtendedMapMode;
+import jdk.nio.mapmode.ExtendedMapMode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

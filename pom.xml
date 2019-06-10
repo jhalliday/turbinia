@@ -31,6 +31,11 @@
         <junit.version>5.4.0</junit.version>
         <byteman.version>4.0.6</byteman.version>
         <jmh.version>1.21</jmh.version>
+
+        <!-- for now you need a custom build of the pre-release jdk13 with pmem patches.
+            When http://openjdk.java.net/jeps/352 is merged you'll just need jdk13
+            Note: must be am image build not an exploded, or surefire won't find JAVA_VERSION in release file -->
+        <jdk.dir>/home/jhalli/IdeaProjects/openjdk/13b/jdk-jdk/build/linux-x86_64-server-release/images/jdk</jdk.dir>
     </properties>
 
     <build>
@@ -41,12 +46,40 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.8.0</version>
-                    <configuration>
-                        <fork>true</fork>
-                        <!-- for now you need a custom build of the pre-release jdk13 with pmem patches.
-                            When http://openjdk.java.net/jeps/352 is merged you'll just need jdk13 -->
-                        <executable>/home/jhalli/IdeaProjects/openjdk/13/jdk-jdk/build/linux-x86_64-server-release/images/jdk/bin/javac</executable>
-                    </configuration>
+                    <executions>
+
+                        <!-- Almost everything uses jdk 13, but one class is compiled to a 1.8 target so it can be loaded on older JVMs.
+                            We could use a multi-version jar instead, but those are better suited where only a few classes are available in newer versions.
+                            We have the reverse problem - almost nothing works on old versions. Besides, maven support for packaging multi-version is a mess -->
+
+                        <execution>
+                            <id>default-compile</id>
+                            <configuration>
+                                <fork>true</fork>
+                                <executable>${jdk.dir}/bin/javac</executable>
+                                <excludes>
+                                    <exclude>**/PmemUtil.java</exclude>
+                                </excludes>
+                            </configuration>
+                        </execution>
+
+                        <execution>
+                            <id>legacy-compile</id>
+                            <goals>
+                                <goal>compile</goal>
+                            </goals>
+                            <configuration>
+                                <includes>
+                                    <include>**/PmemUtil.java</include>
+                                </includes>
+                                <source>1.8</source>
+                                <target>1.8</target>
+                                <fork>true</fork>
+                                <executable>${jdk.dir}/bin/javac</executable>
+                            </configuration>
+                        </execution>
+
+                    </executions>
                 </plugin>
 
 
@@ -104,7 +137,7 @@
                     <useSystemClassLoader>true</useSystemClassLoader>
                     <useManifestOnlyJar>true</useManifestOnlyJar>
                     <forkMode>once</forkMode>
-                    <jvm>/home/jhalli/IdeaProjects/openjdk/13/jdk-jdk/build/linux-x86_64-server-release/images/jdk/bin/java</jvm>
+                    <jvm>${jdk.dir}/bin/java</jvm>
                     <parallel>false</parallel>
                     <!-- ensure we don't inherit annotationClass byteman jar form any env settings -->
                     <environmentVariables>
@@ -141,7 +174,6 @@
                     </execution>
                 </executions>
             </plugin>
-
 
         </plugins>
     </build>

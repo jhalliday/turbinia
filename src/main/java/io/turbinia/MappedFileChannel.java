@@ -12,7 +12,7 @@
  */
 package io.turbinia;
 
-import com.sun.nio.file.ExtendedMapMode;
+import jdk.nio.mapmode.ExtendedMapMode;
 import org.slf4j.ext.XLogger;
 import org.slf4j.ext.XLoggerFactory;
 import sun.misc.Unsafe;

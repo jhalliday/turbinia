@@ -22,10 +22,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.nio.channels.FileChannel;
-import java.nio.file.Files;
-import java.nio.file.StandardOpenOption;
-import java.util.EnumSet;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -34,7 +30,6 @@ public class MappedFileChannelTests {
 
     private static File file = new File("/mnt/pmem/tx/test");
 
-    private FileChannel fileChannel;
     private MappedFileChannel mappedFileChannel;
 
     @BeforeEach
@@ -44,31 +39,21 @@ public class MappedFileChannelTests {
             file.delete();
         }
 
-        fileChannel = (FileChannel) Files
-                .newByteChannel(file.toPath(), EnumSet.of(
-                        StandardOpenOption.READ,
-                        StandardOpenOption.WRITE,
-                        StandardOpenOption.CREATE));
-
-        mappedFileChannel = new MappedFileChannel(fileChannel, 1024);
+        mappedFileChannel = new MappedFileChannel(file, 1024);
     }
 
     @AfterEach
     public void tearDown() throws IOException {
-        mappedFileChannel.close();
+        if(mappedFileChannel != null) {
+            mappedFileChannel.close();
+        }
     }
 
     @Test
     public void testInitializationFailure() throws IOException {
 
-        FileChannel underlyingChannel = (FileChannel) Files
-                .newByteChannel(new File("/tmp/bogus").toPath(), EnumSet.of(
-                        StandardOpenOption.READ,
-                        StandardOpenOption.WRITE,
-                        StandardOpenOption.CREATE));
-
         try {
-            MappedFileChannel mappedFileChannel = new MappedFileChannel(underlyingChannel, 1024);
+            MappedFileChannel mappedFileChannel = new MappedFileChannel(new File("/tmp/bogus"), 1024);
             fail("should throw IOException");
         } catch (IOException e) {
             assertEquals("Operation not supported", e.getMessage());
@@ -137,7 +122,7 @@ public class MappedFileChannelTests {
             // fragile: DO NOT close the MappedFileChannel before discarding,
             // since that closes the fileChannel, which then can't be reused.
             // That will be a problem if gc is ever fixed to do close properly...
-            mappedFileChannel = new MappedFileChannel(fileChannel, 1024);
+            mappedFileChannel = new MappedFileChannel(file, 1024);
         }
 
         mappedFileChannel.position(0);

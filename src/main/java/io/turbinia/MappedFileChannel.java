@@ -17,13 +17,17 @@ import org.slf4j.ext.XLogger;
 import org.slf4j.ext.XLoggerFactory;
 import sun.misc.Unsafe;
 
+import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -74,15 +78,20 @@ public class MappedFileChannel extends FileChannel {
      * Initializes a new MappedFileChannel over the provided FileChannel, with a fixed length.
      * The data capacity will be less than the given length, due to metadata overhead.
      *
-     * @param fileChannel The underlying FileChannel over which to map.
+     * @param file The file over which to map.
      * @param length The required raw capacity, including metadata space.
      *
      * @throws IOException if the mapping cannot be created, such as when the File is on a filesystem that does not support DAX.
      */
-    public MappedFileChannel(FileChannel fileChannel, int length) throws IOException {
-        logger.entry(fileChannel, length);
+    public MappedFileChannel(File file, int length) throws IOException {
+        logger.entry(file, length);
 
-        this.fileChannel = fileChannel;
+        this.fileChannel = (FileChannel) Files
+                .newByteChannel(file.toPath(), EnumSet.of(
+                        StandardOpenOption.READ,
+                        StandardOpenOption.WRITE,
+                        StandardOpenOption.CREATE));
+
         MappedByteBuffer tmpRawBuffer = fileChannel.map(ExtendedMapMode.READ_WRITE_SYNC, 0, length);
 
         rawBuffer = tmpRawBuffer;

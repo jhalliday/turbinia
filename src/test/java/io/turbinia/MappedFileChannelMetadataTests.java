@@ -36,7 +36,6 @@ public class MappedFileChannelMetadataTests {
 
         if (file.exists()) {
             file.delete();
-
         }
     }
 
@@ -44,6 +43,10 @@ public class MappedFileChannelMetadataTests {
     public void tearDown() throws IOException {
         if(mappedFileChannelMetadata != null) {
             mappedFileChannelMetadata.close();
+        }
+
+        if (file.exists()) {
+            file.delete();
         }
     }
 

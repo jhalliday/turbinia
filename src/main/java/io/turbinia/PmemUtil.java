@@ -15,14 +15,11 @@ package io.turbinia;
 import org.slf4j.ext.XLogger;
 import org.slf4j.ext.XLoggerFactory;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.nio.channels.FileChannel;
-import java.nio.file.Files;
-import java.nio.file.StandardOpenOption;
-import java.util.EnumSet;
 
 /**
  * Utility functions for accessing pmem abstractions.
@@ -35,22 +32,26 @@ public class PmemUtil {
 
     private static final XLogger logger = XLoggerFactory.getXLogger(PmemUtil.class);
 
-    // MappedFileChannel is built for jdk 13, whereas this class is built for 8,
+    // most classes are built for jdk 13, whereas this class is built for 8,
     // so we want to avoid hard linking or we'll get headaches.
     private static final Constructor mappedFileChannelConstructor;
+    private static final Constructor mappedFileChannelMetadataConstructor;
 
     static {
 
-        Constructor tmp = null;
+        Constructor fccTmp = null;
+        Constructor fccmdTmp = null;
         try {
             String specVersion = System.getProperty("java.specification.version");
-            if(!specVersion.contains(".") && Integer.parseInt(specVersion) < 13) {
-                tmp = Class.forName("io.turbinia.MappedFileChannel").getDeclaredConstructor(FileChannel.class, int.class);
+            if(!specVersion.contains(".") && Integer.parseInt(specVersion) >= 13) {
+                fccTmp = Class.forName("io.turbinia.MappedFileChannel").getDeclaredConstructor(File.class, int.class);
+                fccmdTmp = Class.forName("io.turbinia.MappedFileChannelMetadata").getDeclaredConstructor(File.class);
             }
         } catch (Exception e) {
             logger.debug("Can't wire MappedFileChannel constructor", e);
         }
-        mappedFileChannelConstructor = tmp;
+        mappedFileChannelConstructor = fccTmp;
+        mappedFileChannelMetadataConstructor = fccmdTmp;
     }
 
     public static void main(String[] args) {
@@ -60,6 +61,8 @@ public class PmemUtil {
 
     /**
      * Validate if it's possible to use pmem via a DAX mmap for the given path.
+     *
+     * Note that pmemChannelFor implicitly makes this check, so direct calls are not normally required.
      *
      * This method checks that
      *   a) the JVM is recent enough to have pmem support
@@ -95,13 +98,8 @@ public class PmemUtil {
         try {
             testFile = File.createTempFile("isPmemSupportedFor", "", dir);
 
-            FileChannel fileChannel = (FileChannel) Files.newByteChannel(testFile.toPath(), EnumSet.of(
-                    StandardOpenOption.READ,
-                    StandardOpenOption.WRITE,
-                    StandardOpenOption.CREATE));
-
-            FileChannel mappedFileChannel = (FileChannel)mappedFileChannelConstructor.newInstance(fileChannel, 1024);
-            mappedFileChannel.close();
+            Closeable mappedFileChannelMetadata = (Closeable) mappedFileChannelMetadataConstructor.newInstance(testFile);
+            mappedFileChannelMetadata.close();
 
             logger.exit(true);
             return true;
@@ -146,28 +144,18 @@ public class PmemUtil {
 
         FileChannel fileChannel = null;
         try {
-            fileChannel = (FileChannel) Files.newByteChannel(file.toPath(), EnumSet.of(
-                    StandardOpenOption.READ,
-                    StandardOpenOption.WRITE,
-                    StandardOpenOption.CREATE));
-
-            fileChannel = (FileChannel)mappedFileChannelConstructor.newInstance(fileChannel, length);
+            fileChannel = (FileChannel)mappedFileChannelConstructor.newInstance(file, length);
 
         } catch (Exception e) {
-            logger.debug("pmem mapping failed for {}", file.getAbsolutePath(), e);
-
-            if(fileChannel != null) {
-                try {
-                    fileChannel.truncate(initialSize);
-                    fileChannel.close();
-                } catch (IOException e1) {
-                }
-            }
+            // as long as the isPmemSupportedFor works this should not happen, but...
+            // if the mapping fails after it's already expanded the file to the required size, there is a mess to clean up
+            logger.debug("pmem mapping failed for {}. File may need truncation.", file.getAbsolutePath(), e);
             fileChannel = null;
             if(create) {
                 file.delete();
             }
         }
+
         logger.exit(fileChannel);
         return fileChannel;
     }

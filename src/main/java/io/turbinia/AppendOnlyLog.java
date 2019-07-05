@@ -44,7 +44,7 @@ public class AppendOnlyLog implements Iterable<ByteBuffer> {
     private static final int INT_SIZE = 4;
     private static final int BLOCK_SIZE = 256;
 
-    private static final int CACHE_LINE_SIZE = 64; // safe bet for Intel. the JVM knows the actual runtime value, but doesn't expose it.
+    private static final int CACHE_LINE_SIZE = 64; // safe bet for Intel. the JVM knows the actual runtime value, but doesn't expose it except via unsafe.dataCacheLineFlushSize
 
     // these offsets are relative to 'buffer'
     private static final int MAGIC_OFFSET = 0;
@@ -73,8 +73,6 @@ public class AppendOnlyLog implements Iterable<ByteBuffer> {
     // The number of times this log has been cleared, used to keep Iterators in sync.
     private int epoch = 0;
 
-    // TODO add iter support for holes + test
-
     /**
      * Establishes an append-only log structure over a given range of mapped memory.
      *
@@ -82,6 +80,7 @@ public class AppendOnlyLog implements Iterable<ByteBuffer> {
      * @param offset       The offset within the byteBuffer, from which to start the log structure. This MUST be cache line aligned and SHOULD be 256-byte block aligned.
      * @param length       The size of the region within the buffer which is available for the log.
      * @param blockPadding true if extra space should be used to increase performance, or false for a slower but more compact record format.
+     * @param linearOrdering true is strict serial ordering of writes is required, false for more relaxed ordering guarantees.
      */
     public AppendOnlyLog(MappedByteBuffer byteBuffer, int offset, int length, boolean blockPadding, boolean linearOrdering) {
         logger.entry(byteBuffer, offset, length, blockPadding);
@@ -359,8 +358,6 @@ public class AppendOnlyLog implements Iterable<ByteBuffer> {
             // necessary for linking to subsequent records. But... we don't want to persist the same line multiple times
             // since that's slow. We therefore need to fill in the rest of the line containing the header with payload
             // before persisting it, deferring the remainder of the payload write+persist to outside the lock.
-
-            // TODO byteman test me
 
             int nonPayloadBytesInFirstCacheLine = payloadStartPosition % CACHE_LINE_SIZE;
             int payloadCapacityInFistCacheLine = nonPayloadBytesInFirstCacheLine == 0 ? 0 : CACHE_LINE_SIZE - nonPayloadBytesInFirstCacheLine;
@@ -683,38 +680,49 @@ public class AppendOnlyLog implements Iterable<ByteBuffer> {
         private void lookahead() {
             logger.entry();
 
-            if (iterBuffer.remaining() < 4) {
-                logger.exit();
-                return;
-            }
-
             int originalPosition = iterBuffer.position();
+            ByteBuffer byteBuffer = null;
 
             try {
 
-                int length = iterBuffer.getInt();
-                if (length == 0) {
-                    logger.exit();
-                    return;
-                }
-                int expectedChecksum = iterBuffer.getInt();
-                ByteBuffer byteBuffer = iterBuffer.slice();
-                byteBuffer.limit(length);
-                iterBuffer.position(iterBuffer.position() + length);
+                do {
 
-                crc32c.reset();
-                crc32c.update(byteBuffer); // this advances the src buffers position to its limit.
-                int actualChecksum = (int) crc32c.getValue();
-                byteBuffer.rewind();
+                    if (iterBuffer.remaining() < 4) {
+                        logger.exit();
+                        return;
+                    }
 
-                int realignment = (iterBuffer.position() % effectivePaddingSize);
-                if (realignment != 0) {
-                    iterBuffer.position(iterBuffer.position() + (effectivePaddingSize - realignment));
-                }
+                    int length = iterBuffer.getInt();
+                    if (length == 0) {
+                        logger.exit();
+                        return;
+                    }
+                    int expectedChecksum = iterBuffer.getInt();
+                    byteBuffer = iterBuffer.slice();
+                    byteBuffer.limit(length);
+                    iterBuffer.position(iterBuffer.position() + length);
 
-                if (actualChecksum != expectedChecksum) {
-                    return;
-                }
+                    crc32c.reset();
+                    crc32c.update(byteBuffer); // this advances the src buffers position to its limit.
+                    int actualChecksum = (int) crc32c.getValue();
+                    byteBuffer.rewind();
+
+                    int realignment = (iterBuffer.position() % effectivePaddingSize);
+                    if (realignment != 0) {
+                        iterBuffer.position(iterBuffer.position() + (effectivePaddingSize - realignment));
+                    }
+
+                    if(actualChecksum == expectedChecksum) {
+                        break; // found a valid entry, so we're done
+                    }
+
+                    if (isEffectiveLinearOrdering()) {
+                        return; // entry is invalid, but we're not configured to skip bad ones
+                    }
+
+                    // keep looking, there may be good entries after the invalid one(s)...
+                } while(iterBuffer.hasRemaining());
+
 
                 lookahead = byteBuffer.asReadOnlyBuffer();
                 lookaheadPos = iterBuffer.position();

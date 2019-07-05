@@ -17,6 +17,7 @@ import org.slf4j.ext.XLogger;
 import org.slf4j.ext.XLoggerFactory;
 import sun.misc.Unsafe;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -38,7 +39,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * @author Jonathan Halliday (jonathan.halliday@redhat.com)
  * @since 2019-06
  */
-public class MappedFileChannelMetadata {
+public class MappedFileChannelMetadata implements Closeable {
 
     private static final XLogger logger = XLoggerFactory.getXLogger(MappedFileChannelMetadata.class);
 
@@ -69,7 +70,7 @@ public class MappedFileChannelMetadata {
     private int persistenceIndex;
 
     /**
-     * Initialized a new MappedFileChannelMetadata over the given file.
+     * Initialize a new MappedFileChannelMetadata over the given file.
      *
      * @param file The underlying File to use. Must be on DAX aware storage.
      * @throws IOException if the mapping fails.
@@ -105,6 +106,7 @@ public class MappedFileChannelMetadata {
      *
      * @throws IOException if the operation fails.
      */
+    @Override
     public void close() throws IOException {
         logger.entry();
 

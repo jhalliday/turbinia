@@ -80,6 +80,10 @@ class AppendOnlyLogTests {
         unsafe.invokeCleaner(mappedByteBuffer);
 
         fileChannel.close();
+
+        if (file.exists()) {
+            file.delete();
+        }
     }
 
     private void forceInvalidation() {
@@ -262,6 +266,33 @@ class AppendOnlyLogTests {
         assertEquals(data.length, iter.next().remaining());
     }
 
+    @Test
+    public void testNonLinearReadSkip() throws Exception {
+        final AppendOnlyLog appendOnlyLog = new AppendOnlyLog(mappedByteBuffer, 0, 1024, false, false);
+
+        Field f = AppendOnlyLog.class.getDeclaredField("buffer");
+        f.setAccessible(true);
+        MappedByteBuffer buffer = (MappedByteBuffer) f.get(appendOnlyLog);
+        ExecutionTracer.INSTANCE.allowNonFlushingOfDirtyLines = true;
+
+        byte[] record1 = new byte[]{(byte) 1};
+        byte[] record2 = new byte[]{(byte) 2, (byte) 2};
+        byte[] record3 = new byte[]{(byte) 3, (byte) 3, (byte) 3};
+
+        appendOnlyLog.put(record1);
+        // corrupt the record to simulate failure to flush.
+        buffer.putInt(buffer.position() - 4, 0);
+
+        appendOnlyLog.put(record2);
+        // corrupt the record to simulate failure to flush.
+        buffer.putInt(buffer.position() - 4, 0);
+
+        appendOnlyLog.put(record3);
+
+        Iterator<ByteBuffer> iter = appendOnlyLog.iterator();
+        // should skip the two corrupted ones and return the third
+        assertEquals(record3.length, iter.next().remaining());
+    }
 
     @Test
     public void testPadding() {

@@ -48,6 +48,11 @@ public class MappedFileChannelTests {
         if(mappedFileChannel != null) {
             mappedFileChannel.close();
         }
+
+        if (file.exists()) {
+            file.delete();
+            MappedFileChannel.getMetadataFile(file).delete();
+        }
     }
 
     @Test

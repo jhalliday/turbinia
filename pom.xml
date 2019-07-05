@@ -64,6 +64,18 @@
                         </execution>
 
                         <execution>
+                            <id>default-testCompile</id>
+                            <phase>test-compile</phase>
+                            <goals>
+                                <goal>testCompile</goal>
+                            </goals>
+                            <configuration>
+                                <fork>true</fork>
+                                <executable>${jdk.dir}/bin/javac</executable>
+                            </configuration>
+                        </execution>
+
+                        <execution>
                             <id>legacy-compile</id>
                             <goals>
                                 <goal>compile</goal>
@@ -200,13 +212,7 @@
             <optional>true</optional>
         </dependency>
 
-        <dependency>
-            <groupId>org.apache.activemq</groupId>
-            <artifactId>artemis-journal</artifactId>
-            <version>2.7.0</version>
-        </dependency>
-
-
+        <!-- https://junit.org/junit5/ -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
@@ -226,25 +232,22 @@
             <scope>test</scope>
         </dependency>
 
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <version>2.25.0</version>
-            <scope>test</scope>
-        </dependency>
-
+        <!-- https://openjdk.java.net/projects/code-tools/jmh/ -->
         <dependency>
             <groupId>org.openjdk.jmh</groupId>
             <artifactId>jmh-core</artifactId>
             <version>${jmh.version}</version>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.openjdk.jmh</groupId>
             <artifactId>jmh-generator-annprocess</artifactId>
             <version>${jmh.version}</version>
             <!--<scope>provided</scope>-->
+            <optional>true</optional>
         </dependency>
 
+        <!-- https://byteman.jboss.org/ -->
         <dependency>
             <groupId>org.jboss.byteman</groupId>
             <artifactId>byteman-bmunit5</artifactId>

@@ -28,7 +28,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.EnumSet;
 
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @WithBytemanFrom(source = ExecutionTracer.class)
 public class PersistenceHandleTests {
@@ -95,12 +95,7 @@ public class PersistenceHandleTests {
 
         new PersistenceHandle(mappedByteBuffer, 0, 0);
 
-        try {
-            new PersistenceHandle(((MappedByteBuffer) dupl), 0, 0);
-            fail("should thow exception");
-        } catch (IllegalArgumentException e) {
-            // expected
-        }
+        assertThrows(IllegalArgumentException.class, () -> new PersistenceHandle(((MappedByteBuffer) dupl), 0, 0));
     }
 
     @Test

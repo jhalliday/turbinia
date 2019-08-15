@@ -53,12 +53,8 @@ public class MappedFileChannelMetadataTests {
     @Test
     public void testInitializationFailure() throws IOException {
 
-        try {
-            mappedFileChannelMetadata = new MappedFileChannelMetadata(new File("/tmp/bogus"));
-            fail("should throw IOException");
-        } catch (IOException e) {
-            assertEquals("Operation not supported", e.getMessage());
-        }
+        IOException e = assertThrows(IOException.class, () -> new MappedFileChannelMetadata(new File("/tmp/bogus")));
+        assertEquals("Operation not supported", e.getMessage());
     }
 
     @Test

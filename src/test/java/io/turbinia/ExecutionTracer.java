@@ -233,7 +233,7 @@ public class ExecutionTracer {
             action = "io.turbinia.ExecutionTracer.INSTANCE.mbbConstructor($1, $2, $3, $4, $5);")
     public void mbbConstructor(int cap, long address, FileDescriptor fd, Runnable unmapper, boolean isSync) {
         if (isSync) {
-            logger.debug("MappedByteBuffer<init>(address={}, cap={})", address, cap);
+            logger.debug("MappedByteBuffer<load>(address={}, cap={})", address, cap);
 
             this.address = address;
             int lines = (int) Math.ceil(1.0 * cap / CACHE_LINE_FLUSH_SIZE);

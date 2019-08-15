@@ -59,13 +59,9 @@ public class MappedFileChannelTests {
     public void testInitializationFailure() throws IOException {
 
         File bogusFile = new File("/tmp/bogus");
-        try {
-            MappedFileChannel mappedFileChannel = new MappedFileChannel(bogusFile, 1024);
-            fail("should throw IOException");
-        } catch (IOException e) {
-            assertEquals("Operation not supported", e.getMessage());
-            assertFalse(MappedFileChannel.getMetadataFile(bogusFile).exists());
-        }
+        IOException e = assertThrows(IOException.class, () -> new MappedFileChannel(bogusFile, 1024));
+        assertEquals("Operation not supported", e.getMessage());
+        assertFalse(MappedFileChannel.getMetadataFile(bogusFile).exists());
     }
 
     @Test

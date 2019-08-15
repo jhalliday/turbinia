@@ -26,20 +26,10 @@ public class PmemUtilTests {
     public void testExceptionForBadPaths() {
 
         File notDir = new File("/dev/null");
-        try {
-            PmemUtil.isPmemSupportedFor(notDir);
-            fail("expected an exception");
-        } catch (IllegalArgumentException e) {
-            //expected
-        }
+        assertThrows(IllegalArgumentException.class, () -> PmemUtil.isPmemSupportedFor(notDir));
 
         File notAThing = new File("/bogus");
-        try {
-            PmemUtil.isPmemSupportedFor(notAThing);
-            fail("expected an exception");
-        } catch (IllegalArgumentException e) {
-            //expected
-        }
+        assertThrows(IllegalArgumentException.class, () -> PmemUtil.isPmemSupportedFor(notAThing));
     }
 
     @Test
@@ -80,12 +70,7 @@ public class PmemUtilTests {
 
         assertFalse(testFile.exists());
 
-        try {
-            PmemUtil.pmemChannelFor(testFile, 1024, false);
-            fail("expected an exception");
-        } catch (FileNotFoundException e) {
-            // expected
-        }
+        assertThrows(FileNotFoundException.class, () -> PmemUtil.pmemChannelFor(testFile, 1024, false));
 
         testFile.delete();
     }
